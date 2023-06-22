@@ -5,8 +5,15 @@
 -- En esta sección se borrarán los objetos previamente creados
 
 -- Borrado de vistas
-IF OBJECT_ID('FUSECHUDA.MayorCantidadPedidos','U') IS NOT NULL
+IF OBJECT_ID('FUSECHUDA.MayorCantidadPedidos','V') IS NOT NULL
   DROP VIEW FUSECHUDA.MayorCantidadPedidos
+IF OBJECT_ID('FUSECHUDA.CalificacionPromedio','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.CalificacionPromedio
+IF OBJECT_ID('FUSECHUDA.MontoCuponesReclamos','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.MontoCuponesReclamos
+IF OBJECT_ID('FUSECHUDA.ReclamosMensuales','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.ReclamosMensuales
+  
 
 -- Borrado de tablas
 IF OBJECT_ID('FUSECHUDA.BI_Tiempo','U') IS NOT NULL
@@ -44,8 +51,10 @@ IF OBJECT_ID('FUSECHUDA.BI_Pedidos','U') IS NOT NULL
 IF OBJECT_ID('FUSECHUDA.BI_Mensajeria','U') IS NOT NULL
   DROP TABLE FUSECHUDA.BI_Mensajeria
 IF OBJECT_ID('FUSECHUDA.BI_Reclamos','U') IS NOT NULL
-  DROP TABLE FUSECHUDA.BI_Reclamos  
-
+  DROP TABLE FUSECHUDA.BI_Reclamos   
+IF OBJECT_ID('FUSECHUDA.BI_CuponesReclamos','U') IS NOT NULL
+  DROP TABLE FUSECHUDA.BI_CuponesReclamos  
+  
   
 GO
 -------------------------------------------------------------------------------------------------------------------------
@@ -183,6 +192,18 @@ CREATE TABLE FUSECHUDA.BI_Usuario
 )
 GO
 
+CREATE TABLE FUSECHUDA.BI_CuponesReclamos
+(
+	CUPON_NRO [decimal](18, 0),
+	RECLAMO_NRO [decimal](18, 0),
+	ID_USUARIO [decimal](18, 0),
+	TIPO_CUPON [decimal](18, 0),
+	MONTO [decimal](18, 2),
+	FECHA_ALTA DATETIME,
+	FECHA_VENCIMIENTO DATETIME
+)
+GO
+
 
 -------------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------------Sección 3--------------------------------------------------------
@@ -273,6 +294,11 @@ SELECT ID_USUARIO, DNI, NOMBRE, APELLIDO, TELEFONO, MAIL, FECHA_NAC, FECHA_REGIS
 FROM FUSECHUDA.USUARIO
 GO
 
+INSERT INTO FUSECHUDA.BI_CuponesReclamos (CUPON_NRO, RECLAMO_NRO, ID_USUARIO, TIPO_CUPON, MONTO, FECHA_ALTA, FECHA_VENCIMIENTO)
+SELECT NUMERO_RECLAMO_CUPON, NUMERO_RECLAMO, ID_USUARIO, ID_TIPO_CUPON_RECLAMO, MONTO_RECLAMO, FECHA_RECLAMO_ALTA, FECHA_RECLAMO_VENCIMIENTO
+FROM FUSECHUDA.CUPON_DESC_RECLAMO
+GO
+
 -------------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------------Sección 4--------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
@@ -292,7 +318,8 @@ TipoMediodePago [decimal](18,0),
 LocalCategoria [decimal](18,0),
 LocalTipo [decimal](18,0),
 TipoMovilidad [decimal](18,0),
-EstadoPedido [decimal](18,0)
+EstadoPedido [decimal](18,0),
+Calificacion [decimal](18,0)
 )
 GO
 
@@ -310,7 +337,8 @@ SELECT DISTINCT
 	cat.ID_CATEGORIA,
 	cat.ID_TIPO,
 	rep.ID_MOVILIDAD, 
-	ped.ID_ESTADO
+	ped.ID_ESTADO,
+	ped.CALIFICACION
 FROM FUSECHUDA.PEDIDO ped
 LEFT JOIN FUSECHUDA.BI_Local loc ON loc.ID_LOCAL = ped.ID_LOCAL
 LEFT JOIN FUSECHUDA.BI_Usuario usr ON usr.ID_USUARIO = ped.ID_USUARIO
@@ -362,28 +390,38 @@ GO
 
 
 CREATE TABLE FUSECHUDA.BI_Reclamos(
+Numero [decimal](18,0),
 Tiempo [decimal](18,0),
 Dia [decimal](18,0),
 RangoHorario [decimal](18,0),
 RangoEtarioUsuario [decimal](18,0),
 RangoEtarioOperario [decimal](18,0),
+Pedido [decimal](18,0),
+[Local] [decimal](18,0),
 TipoReclamo NVARCHAR(50),
+--ReclamoMonto [decimal](18,2),
 EstadoReclamo [decimal](18,0)
 )
 GO
 
-INSERT INTO FUSECHUDA.BI_Reclamos
+INSERT INTO FUSECHUDA.BI_Reclamos (Numero, Tiempo, Dia, RangoHorario, RangoEtarioUsuario, RangoEtarioOperario, Pedido, [Local], TipoReclamo, EstadoReclamo)
 SELECT 
+	rec.NUMERO_RECLAMO,
 	(SELECT ID_TIEMPO FROM FUSECHUDA.BI_Tiempo WHERE AÑO = DATEPART(YEAR,rec.FECHA) AND MES = DATEPART(MONTH, rec.FECHA)) ID_Tiempo,
 	(SELECT ID_DIA FROM FUSECHUDA.BI_Dia WHERE UPPER(DIA) = UPPER(REPLACE(REPLACE(DATENAME(DW, rec.FECHA),'á','a'),'é','e'))) ID_Dia,	
 	(SELECT ID_RANGO_HORARIO FROM FUSECHUDA.BI_Rango_Horario WHERE CONVERT(time, rec.FECHA) BETWEEN HORA_INICIAL AND HORA_FINAL) RangoHorario,
 	(SELECT ID_RANGO_ETARIO FROM FUSECHUDA.BI_Rango_Etario WHERE DATEDIFF(YEAR, usr.FECHA_NAC, GETDATE()) BETWEEN EDAD_INICIAL AND EDAD_FINAL) RangoEtarioUsuario,
 	(SELECT ID_RANGO_ETARIO FROM FUSECHUDA.BI_Rango_Etario WHERE DATEDIFF(YEAR, op.FECHA_NAC, GETDATE()) BETWEEN EDAD_INICIAL AND EDAD_FINAL) RangoEtarioRepartidor,
+	rec.NUMERO_PEDIDO,
+	loc.ID_LOCAL,
 	rec.ID_TIPO_RECLAMO,
 	rec.ID_ESTADO
 FROM FUSECHUDA.RECLAMO rec
 LEFT JOIN FUSECHUDA.BI_Usuario usr ON usr.ID_USUARIO = rec.ID_USUARIO
 LEFT JOIN FUSECHUDA.OPERADOR_RECLAMO op ON op.ID_OPERADOR = rec.ID_OPERADOR
+LEFT JOIN FUSECHUDA.PEDIDO ped ON ped.NUMERO_PEDIDO = rec.NUMERO_PEDIDO
+LEFT JOIN FUSECHUDA.BI_Local loc ON loc.ID_LOCAL = ped.ID_LOCAL
+
 GO
 
 -------------------------------------------------------------------------------------------------------------------------
@@ -404,9 +442,43 @@ SELECT --* from FUSECHUDA.BI_Pedidos
 	COUNT(*) Cantidad
 
 FROM FUSECHUDA.BI_Pedidos ped
-
 GROUP BY Tiempo, ped.Dia, RangoHorario, Localidad, LocalCategoria
-order by COUNT(*) desc
+--order by COUNT(*) desc
 
+GO
 
---SELECT * FROM FUSECHUDA.MayorCantidadPedidos
+-- Promedio de calificación mensual por local.
+CREATE VIEW FUSECHUDA.CalificacionPromedio
+AS
+SELECT
+	ped.[Local],
+	ped.Tiempo,	 
+	AVG(ped.Calificacion) CalificacionPromedio
+FROM FUSECHUDA.BI_Pedidos ped
+WHERE ped.Calificacion IS NOT NULL
+GROUP BY ped.Tiempo, ped.[Local]
+GO
+
+-- Cantidad de reclamos mensuales recibidos por cada local en función del día de la semana y rango horario
+CREATE VIEW FUSECHUDA.ReclamosMensuales
+AS
+SELECT
+	rec.Tiempo,
+	rec.Dia,
+	rec.RangoHorario,
+	rec.[Local],
+	COUNT(*) Cantidad
+FROM FUSECHUDA.BI_Reclamos rec
+GROUP BY rec.Tiempo, rec.Dia, rec.RangoHorario, rec.[Local]
+--order by 1, 2, 3, 4
+GO
+-- Monto mensual generado en cupones a partir de reclamos.
+CREATE VIEW FUSECHUDA.MontoCuponesReclamos
+AS
+SELECT
+	rec.Tiempo,
+	SUM(cuprec.MONTO) MontoMensual
+FROM FUSECHUDA.BI_Reclamos rec
+LEFT JOIN FUSECHUDA.BI_CuponesReclamos cuprec ON cuprec.RECLAMO_NRO = rec.Numero
+GROUP BY rec.Tiempo
+GO
