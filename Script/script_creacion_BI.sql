@@ -19,8 +19,9 @@ IF OBJECT_ID('FUSECHUDA.PromedioMensualAsegurado','V') IS NOT NULL
   DROP VIEW FUSECHUDA.PromedioMensualAsegurado  
 IF OBJECT_ID('FUSECHUDA.PromedioResolucionReclamo','V') IS NOT NULL
   DROP VIEW FUSECHUDA.PromedioResolucionReclamo
+IF OBJECT_ID('FUSECHUDA.ValorEnvioPromedio','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.ValorEnvioPromedio
   
-
 -- Borrado de tablas
 IF OBJECT_ID('FUSECHUDA.BI_Tiempo','U') IS NOT NULL
   DROP TABLE FUSECHUDA.BI_Tiempo
@@ -344,6 +345,7 @@ TipoMediodePago [decimal](18,0),
 LocalCategoria [decimal](18,0),
 LocalTipo [decimal](18,0),
 TipoMovilidad [decimal](18,0),
+PrecioEnvio [decimal](18,2),
 EstadoPedido [decimal](18,0),
 Calificacion [decimal](18,0)
 )
@@ -366,6 +368,7 @@ SELECT DISTINCT
 	cat.ID_CATEGORIA,
 	cat.ID_TIPO,
 	rep.ID_MOVILIDAD, 
+	env.PRECIO_ENVIO,
 	ped.ID_ESTADO,
 	ped.CALIFICACION
 FROM FUSECHUDA.PEDIDO ped
@@ -487,6 +490,20 @@ GROUP BY ped.Tiempo, ped.dia, rh.DESCRIPCION, loc.NOMBRE_LOCALIDAD, LocalCategor
 
 GO
 
+-- Valor promedio mensual que tienen los envíos de pedidos en cada localidad
+-- LISTO
+CREATE VIEW FUSECHUDA.ValorEnvioPromedio
+AS
+SELECT 
+	Tiempo, 
+	prov.NOMBRE_LOCALIDAD,
+	AVG(PrecioEnvio) ValorPromedio
+FROM FUSECHUDA.BI_Pedidos ped
+LEFT JOIN FUSECHUDA.BI_Provincia_Localidad prov ON prov.ID_LOCALIDAD = ped.Localidad
+GROUP BY ped.Tiempo, prov.NOMBRE_LOCALIDAD
+order by 1, 2
+GO
+
 -- Monto total de los cupones utilizados por mes en función del rango etario de los usuarios
 -- LISTO
 CREATE VIEW FUSECHUDA.MontoTotalCupones
@@ -547,6 +564,7 @@ GROUP BY rec.Tiempo, rec.Dia, rh.DESCRIPCION, loc.NOMBRE
 GO
 
 -- Tiempo promedio de resolución de reclamos mensual según cada tipo de reclamo y rango etario de los operadores
+-- LISTO
 CREATE VIEW FUSECHUDA.PromedioResolucionReclamo
 AS
 SELECT
