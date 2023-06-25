@@ -17,6 +17,9 @@ IF OBJECT_ID('FUSECHUDA.MontoTotalCupones','V') IS NOT NULL
   DROP VIEW FUSECHUDA.MontoTotalCupones
 IF OBJECT_ID('FUSECHUDA.PromedioMensualAsegurado','V') IS NOT NULL
   DROP VIEW FUSECHUDA.PromedioMensualAsegurado  
+IF OBJECT_ID('FUSECHUDA.PromedioResolucionReclamo','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.PromedioResolucionReclamo
+  
 
 -- Borrado de tablas
 IF OBJECT_ID('FUSECHUDA.BI_Tiempo','U') IS NOT NULL
@@ -429,12 +432,13 @@ RangoEtarioOperario [decimal](18,0),
 Pedido [decimal](18,0),
 [Local] [decimal](18,0),
 TipoReclamo NVARCHAR(50),
---ReclamoMonto [decimal](18,2),
+Fecha datetime,
+FechaSolucion datetime,
 EstadoReclamo [decimal](18,0)
 )
 GO
 
-INSERT INTO FUSECHUDA.BI_Reclamos (Numero, Tiempo, Dia, RangoHorario, RangoEtarioUsuario, RangoEtarioOperario, Pedido, [Local], TipoReclamo, EstadoReclamo)
+INSERT INTO FUSECHUDA.BI_Reclamos (Numero, Tiempo, Dia, RangoHorario, RangoEtarioUsuario, RangoEtarioOperario, Pedido, [Local], TipoReclamo, Fecha, FechaSolucion, EstadoReclamo)
 SELECT 
 	rec.NUMERO_RECLAMO,
 	CONVERT(VARCHAR,DATEPART(YEAR,rec.FECHA)) + '/' + RIGHT('00' + CONVERT(VARCHAR,DATEPART(MONTH, rec.FECHA)), 2) Tiempo,
@@ -446,6 +450,8 @@ SELECT
 	rec.NUMERO_PEDIDO,
 	loc.ID_LOCAL,
 	rec.ID_TIPO_RECLAMO,
+	rec.FECHA,
+	rec.FECHA_SOLUCION,
 	rec.ID_ESTADO
 FROM FUSECHUDA.RECLAMO rec
 LEFT JOIN FUSECHUDA.BI_Usuario usr ON usr.ID_USUARIO = rec.ID_USUARIO
@@ -538,6 +544,19 @@ LEFT JOIN FUSECHUDA.BI_Local loc ON loc.ID_LOCAL = rec.[Local]
 LEFT JOIN FUSECHUDA.BI_Rango_Horario rh ON rh.ID_RANGO_HORARIO = rec.RangoHorario
 GROUP BY rec.Tiempo, rec.Dia, rh.DESCRIPCION, loc.NOMBRE
 --order by 1, loc.NOMBRE, dia.DIA, rh.HORA_INICIAL , rh.HORA_FINAL
+GO
+
+-- Tiempo promedio de resolución de reclamos mensual según cada tipo de reclamo y rango etario de los operadores
+CREATE VIEW FUSECHUDA.PromedioResolucionReclamo
+AS
+SELECT
+	TipoReclamo, 
+	re.DESCRIPCION RangoEtarioOperario,
+	AVG(DATEDIFF(MINUTE, Fecha, FechaSolucion)) PromedioResolucion
+FROM FUSECHUDA.BI_Reclamos rec
+LEFT JOIN FUSECHUDA.BI_Rango_Etario re ON re.ID_RANGO_ETARIO = rec.RangoEtarioOperario
+GROUP BY rec.TipoReclamo, re.DESCRIPCION
+--ORDER BY 1, 2
 GO
 
 -- Monto mensual generado en cupones a partir de reclamos
