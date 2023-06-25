@@ -249,7 +249,7 @@ INSERT INTO FUSECHUDA.BI_Rango_Etario (EDAD_INICIAL, EDAD_FINAL)
 SELECT 0, 24  UNION ALL
 SELECT 25, 34 UNION ALL
 SELECT 35, 55 UNION ALL
-SELECT 56, 999
+SELECT 56, 200
 GO
 
 INSERT INTO FUSECHUDA.BI_Tipo_Medio_de_Pago (ID_MEDIO_DE_PAGO, TIPO)
@@ -258,7 +258,7 @@ FROM FUSECHUDA.MEDIOS_DE_PAGO
 GO
 
 INSERT INTO FUSECHUDA.BI_Local
-SELECT * FROM FUSECHUDA.LOCAL
+SELECT * FROM FUSECHUDA.[LOCAL]
 GO
 
 
@@ -431,23 +431,29 @@ GO
 -- Esta sección consiste en crear las vistas 
 
 --Día de la semana y franja horaria con mayor cantidad de pedidos según la localidad y categoría del local, para cada mes de cada año.
+--AYUDA POR FAVOR 
 CREATE VIEW FUSECHUDA.MayorCantidadPedidos
 AS
 SELECT --* from FUSECHUDA.BI_Pedidos
-	Tiempo, 
-	Dia,
-	RangoHorario,
-	Localidad, 
+	CONVERT(VARCHAR,tiempo.AÑO) + '-' + CONVERT(VARCHAR,tiempo.MES) Tiempo, 
+	dia.DIA,
+	CONVERT(VARCHAR,rh.HORA_INICIAL) + ' - ' + CONVERT(VARCHAR,rh.HORA_FINAL)	RangoHorario,
+	loc.NOMBRE_LOCALIDAD Localidad, 
 	LocalCategoria,
-	COUNT(*) Cantidad
-
+	COUNT(*) CANTIDAD
+	
 FROM FUSECHUDA.BI_Pedidos ped
-GROUP BY Tiempo, ped.Dia, RangoHorario, Localidad, LocalCategoria
---order by COUNT(*) desc
+LEFT JOIN FUSECHUDA.BI_Dia dia on dia.ID_DIA = ped.Dia
+LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = ped.Tiempo
+LEFT JOIN FUSECHUDA.BI_Rango_Horario rh ON rh.ID_RANGO_HORARIO = ped.RangoHorario
+LEFT JOIN FUSECHUDA.BI_Provincia_Localidad loc ON loc.ID_LOCALIDAD = ped.Localidad
+--WHERE Localidad = 3 AND tiempo.ID_TIEMPO = 1
+GROUP BY tiempo.AÑO, tiempo.MES, dia.DIA,	rh.HORA_INICIAL,rh.HORA_FINAL,	loc.NOMBRE_LOCALIDAD, 	LocalCategoria
+ORDER BY tiempo.AÑO, tiempo.MES, dia.DIA
 
 GO
 
--- Promedio de calificación mensual por local.
+-- Promedio de calificación mensual por local. listo
 CREATE VIEW FUSECHUDA.CalificacionPromedio
 AS
 SELECT
@@ -463,16 +469,19 @@ GO
 CREATE VIEW FUSECHUDA.ReclamosMensuales
 AS
 SELECT
-	rec.Tiempo,
+	--rec.Tiempo,
+	CONVERT(VARCHAR,tiempo.AÑO) + '/' + RIGHT('00' + CONVERT(VARCHAR,tiempo.MES), 2) Tiempo,
+	rec.[Local],
 	rec.Dia,
 	rec.RangoHorario,
-	rec.[Local],
 	COUNT(*) Cantidad
 FROM FUSECHUDA.BI_Reclamos rec
-GROUP BY rec.Tiempo, rec.Dia, rec.RangoHorario, rec.[Local]
---order by 1, 2, 3, 4
+LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = rec.Tiempo
+LEFT JOIN FUSECHUDA
+GROUP BY tiempo.AÑO, tiempo.MES, rec.Dia, rec.RangoHorario, rec.[Local]
+order by 1, rec.[Local], rec.Dia, rec.RangoHorario
 GO
--- Monto mensual generado en cupones a partir de reclamos.
+-- Monto mensual generado en cupones a partir de reclamos. listo
 CREATE VIEW FUSECHUDA.MontoCuponesReclamos
 AS
 SELECT
@@ -482,3 +491,4 @@ FROM FUSECHUDA.BI_Reclamos rec
 LEFT JOIN FUSECHUDA.BI_CuponesReclamos cuprec ON cuprec.RECLAMO_NRO = rec.Numero
 GROUP BY rec.Tiempo
 GO
+
