@@ -410,6 +410,7 @@ LEFT JOIN FUSECHUDA.BI_Categoria_Tipo cat ON cat.ID_CATEGORIA = loc.ID_CATEGORIA
 GO
 
 CREATE TABLE FUSECHUDA.BI_Mensajeria(
+Numero [decimal](18,0),
 Tiempo [decimal](18,0),
 Dia [decimal](18,0),
 RangoHorario [decimal](18,0),
@@ -422,7 +423,9 @@ Fecha datetime,
 FechaEntrega datetime,
 TiempoEstimado [decimal](18,2),
 Paquete NVARCHAR(50),
+PrecioSeguro [decimal](18,2),
 ValorAsegurado [decimal](18,2),
+PrecioEnvio [decimal](18,2),
 Distancia [decimal](18,2),
 TipoMovilidad [decimal](18,0),
 EstadoMensajeria [decimal](18,0)
@@ -431,6 +434,7 @@ GO
 
 INSERT INTO FUSECHUDA.BI_Mensajeria 
 SELECT
+	msj.NUMERO_MENSAJERIA Numero,
 	(SELECT ID_TIEMPO FROM FUSECHUDA.BI_Tiempo WHERE AÑO = DATEPART(YEAR,msj.FECHA_MENSAJERIA) AND MES = DATEPART(MONTH, msj.FECHA_MENSAJERIA)) ID_Tiempo,
 	--CONVERT(VARCHAR,DATEPART(YEAR,msj.FECHA_MENSAJERIA)) + '/' + RIGHT('00' + CONVERT(VARCHAR,DATEPART(MONTH, msj.FECHA_MENSAJERIA)), 2) Tiempo,
 	(SELECT ID_DIA FROM FUSECHUDA.BI_Dia WHERE UPPER(DIA) = UPPER(REPLACE(REPLACE(DATENAME(DW, msj.FECHA_MENSAJERIA),'á','a'),'é','e'))) ID_Dia,	
@@ -445,7 +449,9 @@ SELECT
 	env.FECHA_ENTREGA,
 	env.TIEMPO_ESTIMADO_ENTREGA,
 	msj.PAQUETE_TIPO,
+	msj.PRECIO_SEGURO,
 	msj.VALOR_ASEGURADO,
+	env.PRECIO_ENVIO,
 	msj.DISTANCIA,
 	rep.ID_MOVILIDAD,
 	msj.ID_ESTADO
@@ -509,35 +515,46 @@ GO
 --LISTO
 CREATE VIEW FUSECHUDA.MayorCantidadPedidos
 AS
-SELECT 
+WITH CantidadPedidos AS (
+	SELECT 
 	tiempo.DESCRIPCION Tiempo, 
-	loc.LOCALIDAD, 
-	LocalCategoria,
 	dia.DIA,
-	rh.DESCRIPCION RangoHorario,
-	MayorCantidad
-FROM(
-	SELECT  
-		ped.Tiempo, 
-		ped.Localidad,
-		LocalCategoria,
-		ped.dia,
-		ped.RangoHorario,
-		COUNT(*) MayorCantidad
-	FROM FUSECHUDA.BI_Pedidos ped
-	GROUP BY ped.Tiempo, ped.Localidad, LocalCategoria, ped.dia, ped.RangoHorario
-	HAVING COUNT(*) =   (
-						SELECT TOP 1 COUNT(*) 
-						from FUSECHUDA.BI_Pedidos p 
-						where p.RangoHorario = ped.RangoHorario and p.Localidad = ped.Localidad and p.Dia = ped.dia
-						group by Tiempo, Localidad, LocalCategoria, Dia, RangoHorario
-						order by 1 desc ) 
-) T 
-LEFT JOIN FUSECHUDA.LOCALIDAD loc ON loc.ID_LOCALIDAD = T.Localidad
-LEFT JOIN FUSECHUDA.BI_Rango_Horario rh ON rh.ID_RANGO_HORARIO = T.RangoHorario
-LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = T.Tiempo
-LEFT JOIN FUSECHUDA.DIAS dia ON DIA.ID_DIA = T.Dia
---ORDER BY Tiempo, Localidad , LocalCategoria
+	rh.DESCRIPCION AS RangoHorario,
+	loc.NOMBRE_LOCALIDAD as Localidad,
+	cat.NOMBRE_TIPO as TipoCategoria,
+	COUNT(*) AS cantidad,
+	ROW_NUMBER() OVER (
+			PARTITION BY 
+			loc.NOMBRE_LOCALIDAD,
+			loc.NOMBRE_PROVINCIA,
+			cat.NOMBRE_TIPO,
+			tiempo.DESCRIPCION
+			ORDER BY COUNT(*) DESC
+	) AS row_num
+	FROM FUSECHUDA.BI_Pedidos p
+	INNER JOIN FUSECHUDA.BI_Rango_Horario rh on rh.ID_RANGO_HORARIO = p.RangoHorario
+	INNER JOIN FUSECHUDA.BI_Provincia_Localidad loc ON loc.ID_LOCALIDAD = p.Localidad
+	LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = p.Tiempo
+	INNER JOIN FUSECHUDA.BI_Dia dia ON DIA.ID_DIA = p.Dia
+	INNER JOIN FUSECHUDA.BI_Categoria_Tipo cat ON cat.ID_CATEGORIA = p.LocalCategoria
+	GROUP BY 
+	tiempo.DESCRIPCION, 
+	dia.Dia,
+	rh.DESCRIPCION,
+	loc.NOMBRE_LOCALIDAD,
+	loc.NOMBRE_PROVINCIA,
+	cat.NOMBRE_TIPO
+)
+SELECT 
+		cp.Tiempo,
+		cp.Dia,
+		cp.RangoHorario,
+		cp.Localidad,
+		cp.TipoCategoria,
+		cp.cantidad as cantidad_maxima
+	FROM 
+		CantidadPedidos cp
+	WHERE row_num = 1
 GO
 
 -- Monto total no cobrado por cada local en función de los pedidos cancelados según el día de la semana y la franja horaria
