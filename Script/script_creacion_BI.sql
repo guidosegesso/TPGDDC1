@@ -553,7 +553,7 @@ FROM FUSECHUDA.BI_Pedidos ped
 LEFT JOIN FUSECHUDA.[LOCAL] loc ON loc.ID_LOCAL = ped.[Local]
 LEFT JOIN FUSECHUDA.DIAS dia ON DIA.ID_DIA = ped.Dia
 WHERE ped.EstadoPedido = 2
-GROUP BY loc.NOMBRE, ped.Dia, ped.RangoHorario
+GROUP BY loc.NOMBRE, DIA.DIA, ped.RangoHorario
 --order by 1, 3, 2
 GO
 
@@ -674,7 +674,7 @@ FROM (
 	GROUP BY msj.Tiempo, loc.NOMBRE_LOCALIDAD, re.DESCRIPCION, msj.EstadoMensajeria
 ) T 
 LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = T.Tiempo
-GROUP BY Tiempo ,NOMBRE_LOCALIDAD, DESCRIPCION
+GROUP BY tiempo.DESCRIPCION ,NOMBRE_LOCALIDAD, T.DESCRIPCION
 GO
 
 --Promedio mensual del valor asegurado (valor declarado por el usuario) de los paquetes enviados a través del servicio de mensajería en función del tipo de paquete
@@ -687,7 +687,7 @@ SELECT
 	AVG(ValorAsegurado) ValorAsegurado
 FROM FUSECHUDA.BI_Mensajeria msj
 LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = msj.Tiempo
-GROUP BY Tiempo, Paquete
+GROUP BY tiempo.DESCRIPCION, Paquete
 --order by 1, 2
 GO
 
@@ -706,7 +706,7 @@ LEFT JOIN FUSECHUDA.BI_Local loc ON loc.ID_LOCAL = rec.[Local]
 LEFT JOIN FUSECHUDA.BI_Rango_Horario rh ON rh.ID_RANGO_HORARIO = rec.RangoHorario
 LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = rec.Tiempo
 LEFT JOIN FUSECHUDA.DIAS dia ON DIA.ID_DIA = rec.Dia
-GROUP BY rec.Tiempo, rec.Dia, rh.DESCRIPCION, loc.NOMBRE
+GROUP BY tiempo.DESCRIPCION, dia.DIA, rh.DESCRIPCION, loc.NOMBRE
 --order by 1, loc.NOMBRE, dia.DIA, rh.HORA_INICIAL , rh.HORA_FINAL
 GO
 
@@ -734,6 +734,6 @@ SELECT
 FROM FUSECHUDA.BI_Reclamos rec
 LEFT JOIN FUSECHUDA.BI_CuponesReclamos cuprec ON cuprec.RECLAMO_NRO = rec.Numero
 LEFT JOIN FUSECHUDA.BI_Tiempo tiempo ON tiempo.ID_TIEMPO = rec.Tiempo
-GROUP BY rec.Tiempo
+GROUP BY tiempo.DESCRIPCION
 GO
 
