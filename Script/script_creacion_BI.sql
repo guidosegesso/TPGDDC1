@@ -21,7 +21,14 @@ IF OBJECT_ID('FUSECHUDA.PromedioResolucionReclamo','V') IS NOT NULL
   DROP VIEW FUSECHUDA.PromedioResolucionReclamo
 IF OBJECT_ID('FUSECHUDA.ValorEnvioPromedio','V') IS NOT NULL
   DROP VIEW FUSECHUDA.ValorEnvioPromedio
+IF OBJECT_ID('FUSECHUDA.TotalNoCobrado','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.TotalNoCobrado
+IF OBJECT_ID('FUSECHUDA.PedidosYMensajeriasEntregados','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.PedidosYMensajeriasEntregados
+IF OBJECT_ID('FUSECHUDA.DesvioPromedioDeEntrega','V') IS NOT NULL
+  DROP VIEW FUSECHUDA.DesvioPromedioDeEntrega
   
+    
 -- Borrado de tablas
 IF OBJECT_ID('FUSECHUDA.BI_Tiempo','U') IS NOT NULL
   DROP TABLE FUSECHUDA.BI_Tiempo
@@ -345,6 +352,10 @@ TipoMediodePago [decimal](18,0),
 LocalCategoria [decimal](18,0),
 LocalTipo [decimal](18,0),
 TipoMovilidad [decimal](18,0),
+Total [decimal](18,2),
+Fecha datetime,
+FechaEntrega datetime,
+TiempoEstimado [decimal](18,2),
 PrecioEnvio [decimal](18,2),
 EstadoPedido [decimal](18,0),
 Calificacion [decimal](18,0)
@@ -368,6 +379,10 @@ SELECT DISTINCT
 	cat.ID_CATEGORIA,
 	cat.ID_TIPO,
 	rep.ID_MOVILIDAD, 
+	ped.TOTAL,
+	ped.FECHA,
+	env.FECHA_ENTREGA,
+	env.TIEMPO_ESTIMADO_ENTREGA,
 	env.PRECIO_ENVIO,
 	ped.ID_ESTADO,
 	ped.CALIFICACION
@@ -390,6 +405,9 @@ Localidad [decimal](18,0),
 RangoEtarioUsuario [decimal](18,0),
 RangoEtarioRepartidor [decimal](18,0),
 TipoMediodePago [decimal](18,0),
+Fecha datetime,
+FechaEntrega datetime,
+TiempoEstimado [decimal](18,2),
 Paquete NVARCHAR(50),
 ValorAsegurado [decimal](18,2),
 Distancia [decimal](18,2),
@@ -410,6 +428,9 @@ SELECT
 	(SELECT ID_RANGO_ETARIO FROM FUSECHUDA.BI_Rango_Etario WHERE DATEDIFF(YEAR, usr.FECHA_NAC, GETDATE()) BETWEEN EDAD_INICIAL AND EDAD_FINAL) RangoEtarioUsuario,
 	(SELECT ID_RANGO_ETARIO FROM FUSECHUDA.BI_Rango_Etario WHERE DATEDIFF(YEAR, rep.FECHA_NAC, GETDATE()) BETWEEN EDAD_INICIAL AND EDAD_FINAL) RangoEtarioRepartidor,
 	mdp.ID_MEDIO_DE_PAGO,
+	msj.FECHA_MENSAJERIA,
+	env.FECHA_ENTREGA,
+	env.TIEMPO_ESTIMADO_ENTREGA,
 	msj.PAQUETE_TIPO,
 	msj.VALOR_ASEGURADO,
 	msj.DISTANCIA,
@@ -487,7 +508,22 @@ LEFT JOIN FUSECHUDA.BI_Rango_Horario rh ON rh.ID_RANGO_HORARIO = ped.RangoHorari
 LEFT JOIN FUSECHUDA.BI_Provincia_Localidad loc ON loc.ID_LOCALIDAD = ped.Localidad
 GROUP BY ped.Tiempo, ped.dia, rh.DESCRIPCION, loc.NOMBRE_LOCALIDAD, LocalCategoria
 --ORDER BY ped.Tiempo, loc.NOMBRE_LOCALIDAD, LocalCategoria
+GO
 
+-- Monto total no cobrado por cada local en función de los pedidos cancelados según el día de la semana y la franja horaria
+-- LISTO
+CREATE VIEW FUSECHUDA.TotalNoCobrado
+AS
+SELECT distinct
+	loc.NOMBRE,
+	ped.Dia,
+	ped.RangoHorario,
+	SUM(ped.Total) TotalNoCobrado
+FROM FUSECHUDA.BI_Pedidos ped
+LEFT JOIN FUSECHUDA.[LOCAL] loc ON loc.ID_LOCAL = ped.[Local]
+WHERE ped.EstadoPedido = 2
+GROUP BY loc.NOMBRE, ped.Dia, ped.RangoHorario
+--order by 1, 3, 2
 GO
 
 -- Valor promedio mensual que tienen los envíos de pedidos en cada localidad
@@ -501,7 +537,42 @@ SELECT
 FROM FUSECHUDA.BI_Pedidos ped
 LEFT JOIN FUSECHUDA.BI_Provincia_Localidad prov ON prov.ID_LOCALIDAD = ped.Localidad
 GROUP BY ped.Tiempo, prov.NOMBRE_LOCALIDAD
-order by 1, 2
+--order by 1, 2
+GO
+
+-- Desvío promedio en tiempo de entrega según el tipo de movilidad, el día de la semana y la franja horaria.
+-- LISTO
+CREATE VIEW FUSECHUDA.DesvioPromedioDeEntrega
+AS
+SELECT 
+	TipoMovilidad,
+	Dia,
+	RangoHorario,
+	AVG( ABS( DATEDIFF(MINUTE, Fecha, FechaEntrega) -  TiempoEstimado))  Desvio
+FROM (
+	SELECT 
+		mov.MOVILIDAD TipoMovilidad, 
+		Dia, 
+		re.DESCRIPCION RangoHorario,
+		ped.Fecha, 
+		ped.FechaEntrega,
+		ped.TiempoEstimado
+	FROM FUSECHUDA.BI_Pedidos ped
+	LEFT JOIN FUSECHUDA.BI_Rango_Horario re ON re.ID_RANGO_HORARIO = ped.RangoHorario
+	LEFT JOIN FUSECHUDA.BI_Movilidad mov ON mov.ID_MOVILIDAD = ped.TipoMovilidad
+	UNION ALL
+	SELECT 
+		mov.MOVILIDAD TipoMovilidad, 
+		Dia, 
+		re.DESCRIPCION RangoHorario,
+		ped.Fecha, 
+		ped.FechaEntrega,
+		ped.TiempoEstimado
+	FROM FUSECHUDA.BI_Mensajeria ped
+	LEFT JOIN FUSECHUDA.BI_Rango_Horario re ON re.ID_RANGO_HORARIO = ped.RangoHorario
+	LEFT JOIN FUSECHUDA.BI_Movilidad mov ON mov.ID_MOVILIDAD = ped.TipoMovilidad
+) T
+GROUP BY TipoMovilidad, Dia, RangoHorario
 GO
 
 -- Monto total de los cupones utilizados por mes en función del rango etario de los usuarios
@@ -531,6 +602,43 @@ FROM FUSECHUDA.BI_Pedidos ped
 LEFT JOIN FUSECHUDA.BI_Local loc ON loc.ID_LOCAL = ped.[Local]
 WHERE ped.Calificacion IS NOT NULL
 GROUP BY ped.Tiempo, loc.NOMBRE
+GO
+
+-- Porcentaje de pedidos y mensajería entregados mensualmente según el rango etario de los repartidores y la localidad.
+-- LISTO
+CREATE VIEW FUSECHUDA.PedidosYMensajeriasEntregados
+AS
+SELECT 
+	Tiempo,
+	DESCRIPCION, 
+	NOMBRE_LOCALIDAD,
+	sum(Entregados)  /	convert(real,sum(Todos)) * 100 PorcentajeEnBaseLocalidad,
+	sum(Entregados)  /	convert(real,(select count(*) from FUSECHUDA.BI_Pedidos) + (select COUNT(*) from FUSECHUDA.BI_Mensajeria)) * 100 PorcentajeEnBaseGeneral
+FROM (
+	SELECT 
+		ped.Tiempo,
+		re.DESCRIPCION,
+		loc.NOMBRE_LOCALIDAD,
+		CASE WHEN ped.EstadoPedido = 1 THEN COUNT(*) ELSE 0 END Entregados ,
+		COUNT(*) Todos
+	FROM FUSECHUDA.BI_Pedidos ped
+	LEFT JOIN FUSECHUDA.BI_Rango_Etario re ON re.ID_RANGO_ETARIO = ped.RangoEtarioRepartidor
+	LEFT JOIN FUSECHUDA.BI_Provincia_Localidad loc ON loc.ID_LOCALIDAD = ped.Localidad
+	GROUP BY ped.Tiempo, loc.NOMBRE_LOCALIDAD, re.DESCRIPCION, ped.EstadoPedido
+	union all
+	SELECT distinct 
+		msj.Tiempo,
+		re.DESCRIPCION,
+		loc.NOMBRE_LOCALIDAD,
+		CASE WHEN msj.EstadoMensajeria = 1 THEN COUNT(*) ELSE 0 END Entregados ,
+		COUNT(*) Todos
+	FROM FUSECHUDA.BI_Mensajeria msj
+	LEFT JOIN FUSECHUDA.BI_Rango_Etario re ON re.ID_RANGO_ETARIO = msj.RangoEtarioRepartidor
+	LEFT JOIN FUSECHUDA.BI_Provincia_Localidad loc ON loc.ID_LOCALIDAD = msj.Localidad
+	where msj.EstadoMensajeria = 1 
+	GROUP BY msj.Tiempo, loc.NOMBRE_LOCALIDAD, re.DESCRIPCION, msj.EstadoMensajeria
+) T 
+GROUP BY Tiempo ,NOMBRE_LOCALIDAD, DESCRIPCION
 GO
 
 --Promedio mensual del valor asegurado (valor declarado por el usuario) de los paquetes enviados a través del servicio de mensajería en función del tipo de paquete
